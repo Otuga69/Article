@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title id="page-title">My Blog</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            padding: 1rem 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-decoration: none;
+        }
+
+        .nav-btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        /* Main Content */
+        .main-content {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        /* Homepage Styles */
+        .hero {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            font-weight: 800;
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .posts-grid {
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+
+        .post-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            border-left: 4px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .post-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .post-card:hover::before {
+            left: 100%;
+        }
+
+        .post-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.1);
+            border-left-color: #667eea;
+        }
+
+        .post-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .post-excerpt {
+            color: #666;
+            margin-bottom: 1rem;
+            font-size: 0.95rem;
+        }
+
+        .post-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #999;
+        }
+
+        .post-date {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.8rem;
+        }
+
+        .read-time {
+            font-style: italic;
+        }
+
+        /* Post Page Styles */
+        .post-content {
+            padding: 3rem 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .post-header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding-bottom: 2rem;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .post-title {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #333;
+            font-weight: 800;
+        }
+
+        .post-info {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            color: #666;
+            font-size: 0.95rem;
+        }
+
+        .post-body {
+            font-size: 1.1rem;
+            line-height: 1.8;
+        }
+
+        .post-body h1, .post-body h2, .post-body h3 {
+            margin: 2rem 0 1rem 0;
+            color: #333;
+        }
+
+        .post-body h1 {
+            font-size: 2.2rem;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+
+        .post-body h2 {
+            font-size: 1.8rem;
+            color: #667eea;
+        }
+
+        .post-body h3 {
+            font-size: 1.4rem;
+        }
+
+        .post-body p {
+            margin-bottom: 1.5rem;
+        }
+
+        .post-body ul, .post-body ol {
+            margin: 1rem 0 1.5rem 2rem;
+        }
+
+        .post-body li {
+            margin-bottom: 0.5rem;
+        }
+
+        .post-body blockquote {
+            border-left: 4px solid #667eea;
+            padding-left: 1.5rem;
+            margin: 2rem 0;
+            font-style: italic;
+            color: #666;
+            background: #f8f9fa;
+            padding: 1rem 1.5rem;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .post-body code {
+            background: #f8f9fa;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Fira Code', monospace;
+            font-size: 0.9em;
+        }
+
+        .post-body pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 10px;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+
+        .post-body pre code {
+            background: none;
+            padding: 0;
+            color: inherit;
+        }
+
+        .post-body img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            margin: 2rem 0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Loading States */
+        .loading {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #666;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #e53e3e;
+        }
+
+        .error h2 {
+            margin-bottom: 1rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .posts-grid {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+
+            .post-content {
+                padding: 2rem 1rem;
+            }
+
+            .post-title {
+                font-size: 2rem;
+            }
+
+            .post-info {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="#" class="logo" onclick="showHomepage()">MyBlog</a>
+                <a href="#" class="nav-btn" onclick="showHomepage()">← Back to Home</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <main class="main-content">
+            <!-- Homepage -->
+            <div id="homepage">
+                <section class="hero">
+                    <h1>Welcome to My Blog</h1>
+                    <p>Exploring ideas, sharing thoughts, and documenting the journey</p>
+                </section>
+                
+                <div id="posts-container" class="posts-grid">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Loading posts...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Post Page -->
+            <div id="post-page" class="hidden">
+                <div class="post-content">
+                    <div class="post-header">
+                        <h1 class="post-title" id="post-title">Post Title</h1>
+                        <div class="post-info">
+                            <span id="post-date">Date</span>
+                            <span id="post-read-time">Read time</span>
+                        </div>
+                    </div>
+                    <article class="post-body" id="post-body">
+                        <!-- Post content will be loaded here -->
+                    </article>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Blog system state
+        let posts = [];
+        let currentView = 'homepage';
+
+        // Initialize the blog system
+        async function initBlog() {
+            await loadPosts();
+            handleRouting();
+        }
+
+        // Load all posts from the posts directory
+        async function loadPosts() {
+            try {
+                // List of your markdown files - you'll need to update this array when you add new posts
+                const postFiles = [
+                    'post.md',
+                    'post.md',
+                    'post.md',
+                    'post.md',
+                    'post.md',
+                    'post.md',
+                    // Add your actual markdown file names here
+                ];
+
+                posts = [];
+                
+                for (const filename of postFiles) {
+                    try {
+                        const response = await fetch(`posts/${filename}`);
+                        if (response.ok) {
+                            const content = await response.text();
+                            const post = parseMarkdownPost(content, filename);
+                            posts.push(post);
+                        }
+                    } catch (error) {
+                        console.warn(`Could not load post: ${filename}`);
+                    }
+                }
+
+                // Sort posts by date (newest first)
+                posts.sort((a, b) => new Date(b.date) - new Date(a.date));
+                displayPosts();
+            } catch (error) {
+                console.error('Error loading posts:', error);
+                showError('Failed to load posts');
+            }
+        }
+
+        // Parse markdown content and extract metadata
+        function parseMarkdownPost(content, filename) {
+            const lines = content.split('\n');
+            let frontMatterEnd = -1;
+            let frontMatter = {};
+
+            // Check for front matter (YAML between --- lines)
+            if (lines[0] === '---') {
+                for (let i = 1; i < lines.length; i++) {
+                    if (lines[i] === '---') {
+                        frontMatterEnd = i;
+                        break;
+                    }
+                    const [key, ...valueParts] = lines[i].split(':');
+                    if (key && valueParts.length > 0) {
+                        frontMatter[key.trim()] = valueParts.join(':').trim().replace(/['"]/g, '');
+                    }
+                }
+            }
+
+            // Extract content after front matter
+            const markdownContent = frontMatterEnd > -1 
+                ? lines.slice(frontMatterEnd + 1).join('\n').trim()
+                : content;
+
+            // Generate slug from filename
+            const slug = filename.replace('.md', '').toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+
+            // Extract title from front matter or first heading
+            let title = frontMatter.title;
+            if (!title) {
+                const titleMatch = markdownContent.match(/^#\s+(.+)/m);
+                title = titleMatch ? titleMatch[1] : filename.replace('.md', '').replace(/-/g, ' ');
+            }
+
+            // Generate excerpt
+            const plainText = markdownContent.replace(/[#*`]/g, '').replace(/\n+/g, ' ');
+            const excerpt = plainText.substring(0, 150) + (plainText.length > 150 ? '...' : '');
+
+            // Calculate read time (average 200 words per minute)
+            const wordCount = plainText.split(/\s+/).length;
+            const readTime = Math.ceil(wordCount / 200);
+
+            return {
+                slug,
+                title,
+                excerpt,
+                content: markdownContent,
+                date: frontMatter.date || new Date().toISOString().split('T')[0],
+                author: frontMatter.author || 'Anonymous',
+                readTime: `${readTime} min read`,
+                filename
+            };
+        }
+
+        // Display posts on homepage
+        function displayPosts() {
+            const container = document.getElementById('posts-container');
+            
+            if (posts.length === 0) {
+                container.innerHTML = `
+                    <div class="error">
+                        <h2>No posts found</h2>
+                        <p>Add some markdown files to the 'posts' folder to get started!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = posts.map(post => `
+                <article class="post-card" onclick="showPost('${post.slug}')">
+                    <h3>${post.title}</h3>
+                    <p class="post-excerpt">${post.excerpt}</p>
+                    <div class="post-meta">
+                        <span class="read-time">${post.readTime}</span>
+                        <span class="post-date">${formatDate(post.date)}</span>
+                    </div>
+                </article>
+            `).join('');
+        }
+
+        // Show individual post
+        async function showPost(slug) {
+            const post = posts.find(p => p.slug === slug);
+            if (!post) {
+                showError('Post not found');
+                return;
+            }
+
+            // Update URL without page reload
+            history.pushState({ view: 'post', slug }, post.title, `#${slug}`);
+            
+            // Update page title
+            document.getElementById('page-title').textContent = `${post.title} - MyBlog`;
+            
+            // Show post page
+            document.getElementById('homepage').classList.add('hidden');
+            document.getElementById('post-page').classList.remove('hidden');
+            
+            // Populate post content
+            document.getElementById('post-title').textContent = post.title;
+            document.getElementById('post-date').textContent = formatDate(post.date);
+            document.getElementById('post-read-time').textContent = post.readTime;
+            
+            // Convert markdown to HTML
+            const html = marked.parse(post.content);
+            document.getElementById('post-body').innerHTML = html;
+            
+            // Scroll to top
+            window.scrollTo(0, 0);
+            
+            currentView = 'post';
+        }
+
+        // Show homepage
+        function showHomepage() {
+            // Update URL
+            history.pushState({ view: 'homepage' }, 'MyBlog', '/');
+            
+            // Update page title
+            document.getElementById('page-title').textContent = 'MyBlog';
+            
+            // Show homepage
+            document.getElementById('post-page').classList.add('hidden');
+            document.getElementById('homepage').classList.remove('hidden');
+            
+            currentView = 'homepage';
+        }
+
+        // Handle browser back/forward
+        function handleRouting() {
+            const hash = window.location.hash.substring(1);
+            if (hash && posts.length > 0) {
+                showPost(hash);
+            } else {
+                showHomepage();
+            }
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+        }
+
+        // Show error message
+        function showError(message) {
+            const container = document.getElementById('posts-container');
+            container.innerHTML = `
+                <div class="error">
+                    <h2>Error</h2>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+
+        // Handle browser navigation
+        window.addEventListener('popstate', (event) => {
+            if (event.state) {
+                if (event.state.view === 'post') {
+                    showPost(event.state.slug);
+                } else {
+                    showHomepage();
+                }
+            } else {
+                handleRouting();
+            }
+        });
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initBlog);
+    </script>
+</body>
+</html>
