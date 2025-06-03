@@ -1,0 +1,28 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main    # or whichever branch you use as the “source” for your site
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) Check out your repo
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # 2) Replace the placeholder in index.html
+      - name: Inject PocketBase URL
+        run: |
+          # This replaces every "%POCKETBASE_URL%" in index.html
+          sed -i "s|%POCKETBASE_URL%|${{ secrets.POCKETBASE_URL }}|g" index.html
+
+      # 3) Deploy the resulting files to the gh-pages branch
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./   # “./” because your site is just index.html at the repo root
