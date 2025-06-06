@@ -6,7 +6,7 @@
     <title>News Tribune</title>
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2099519216159666"
      crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <header class="header">
@@ -36,10 +36,14 @@
                     <input type="text" id="title" name="title" required>
                 </div>
                 <div class="form-group">
+                    <label for="image">Featured Image (JPG/PNG)</label>
+                    <input type="file" id="image" name="image" accept=".jpg,.jpeg,.png" style="padding: 0.5rem;">
+                </div>
+                <div class="form-group">
                     <label for="content">Article Content</label>
                     <textarea id="content" name="content" required></textarea>
                 </div>
-                <button type="submit" class="btn">Publish Article</button>
+                <button type="submit" class="btn" id="submit-btn">Publish Article</button>
             </form>
         </div>
     </div>
@@ -55,7 +59,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
     <script>
-        const POCKETBASE_URL = 'http://app.flashreport.rest';
+        const POCKETBASE_URL = 'https://app.flashreport.rest';
         let currentPosts = [];
         
         document.addEventListener('DOMContentLoaded', function() {
@@ -75,21 +79,83 @@
             document.getElementById('post-view').style.display = 'none';
         }
 
+        async function checkForDuplicates(title, content) {
+            try {
+                const filter = encodeURIComponent(`title="${title}" || post="${content}"`);
+                const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records?filter=${filter}`);
+                const data = await response.json();
+                return data.items && data.items.length > 0;
+            } catch (error) {
+                console.error('Duplicate check failed:', error);
+                return false;
+            }
+        }
+
+        async function removeDuplicates() {
+            try {
+                const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records?perPage=500`);
+                const data = await response.json();
+                const posts = data.items || [];
+                
+                const seen = new Map();
+                const duplicates = [];
+                
+                posts.forEach(post => {
+                    const key = `${post.title}_${post.post}`;
+                    if (seen.has(key)) {
+                        duplicates.push(post.id);
+                    } else {
+                        seen.set(key, post.id);
+                    }
+                });
+                
+                for (const id of duplicates) {
+                    await fetch(`${POCKETBASE_URL}/api/collections/posts/records/${id}`, {
+                        method: 'DELETE'
+                    });
+                }
+                
+                if (duplicates.length > 0) {
+                    showMessage(`Removed ${duplicates.length} duplicate posts`, 'success');
+                    loadPosts();
+                }
+            } catch (error) {
+                console.error('Deduplication failed:', error);
+            }
+        }
+
         async function handleSubmit(e) {
             e.preventDefault();
             
-            const title = document.getElementById('title').value;
-            const content = document.getElementById('content').value;
+            const submitBtn = document.getElementById('submit-btn');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Publishing...';
+            
+            const title = document.getElementById('title').value.trim();
+            const content = document.getElementById('content').value.trim();
+            const imageFile = document.getElementById('image').files[0];
             
             try {
+                // Check for duplicates
+                const isDuplicate = await checkForDuplicates(title, content);
+                if (isDuplicate) {
+                    showMessage('Article with same title or content already exists!', 'error');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('title', title);
+                formData.append('post', content);
+                formData.append('likes', '0');
+                
+                if (imageFile) {
+                    formData.append('image', imageFile);
+                }
+                
                 const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: title,
-                        post: content,
-                        likes: 0
-                    })
+                    body: formData
                 });
 
                 if (response.ok) {
@@ -98,10 +164,14 @@
                     setTimeout(() => showHome(), 1000);
                     loadPosts();
                 } else {
-                    showMessage('Failed to publish article', 'error');
+                    const errorData = await response.json();
+                    showMessage(`Failed to publish: ${errorData.message || 'Unknown error'}`, 'error');
                 }
             } catch (error) {
                 showMessage('Error: ' + error.message, 'error');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
             }
         }
 
@@ -122,6 +192,13 @@
             }
         }
 
+        function getImageUrl(record) {
+            if (record.image) {
+                return `${POCKETBASE_URL}/api/files/${record.collectionName}/${record.id}/${record.image}`;
+            }
+            return null;
+        }
+
         function renderPosts() {
             const featured = currentPosts[0];
             const regular = currentPosts.slice(1, 7);
@@ -130,9 +207,10 @@
             const featuredHTML = featured ? `
                 <div class="featured-post" onclick="showPost('${featured.id}')">
                     <h2>${escapeHtml(featured.title)}</h2>
+                    <div class="meta">${formatDate(featured.created)} • ${featured.likes || 0} likes</div>
+                    ${getImageUrl(featured) ? `<img src="${getImageUrl(featured)}" alt="${escapeHtml(featured.title)}" class="featured-image">` : ''}
                     <div class="excerpt">${escapeHtml(getExcerpt(featured.post, 200))}</div>
-                    <div class="meta">
-                        ${formatDate(featured.created)} • ${featured.likes || 0} likes
+                    <div class="meta-bottom">
                         <button class="like-btn" onclick="event.stopPropagation(); likePost('${featured.id}', this)">
                             ♥ ${featured.likes || 0}
                         </button>
@@ -143,9 +221,11 @@
             const regularHTML = regular.map(post => `
                 <div class="post-card" onclick="showPost('${post.id}')">
                     <h3>${escapeHtml(post.title)}</h3>
+                    <div class="meta">${formatDate(post.created)}</div>
+                    ${getImageUrl(post) ? `<img src="${getImageUrl(post)}" alt="${escapeHtml(post.title)}" class="post-image">` : ''}
                     <div class="excerpt">${escapeHtml(getExcerpt(post.post, 120))}</div>
                     <div class="meta">
-                        <span>${formatDate(post.created)}</span>
+                        <span></span>
                         <button class="like-btn" onclick="event.stopPropagation(); likePost('${post.id}', this)">
                             ♥ ${post.likes || 0}
                         </button>
@@ -168,6 +248,7 @@
                 <div class="sidebar">
                     <h3>Trending</h3>
                     ${trendingHTML}
+                    <button class="btn" onclick="removeDuplicates()" style="margin-top: 2rem; font-size: 0.9rem; padding: 0.5rem 1rem;">Clean Duplicates</button>
                 </div>
             `;
         }
@@ -204,7 +285,12 @@
             document.getElementById('post-view-meta').innerHTML = `
                 ${formatDate(post.created)} • ${post.likes || 0} likes
             `;
-            document.getElementById('post-view-content').innerHTML = marked.parse(post.post);
+            
+            const imageHtml = getImageUrl(post) ? 
+                `<img src="${getImageUrl(post)}" alt="${escapeHtml(post.title)}" class="post-view-image">` : '';
+            
+            document.getElementById('post-view-content').innerHTML = 
+                imageHtml + marked.parse(post.post);
         }
 
         function getExcerpt(text, length) {
