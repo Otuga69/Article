@@ -24,6 +24,7 @@
             <div id="main-content" class="main-content">
                 <div class="loading">Loading articles...</div>
             </div>
+            <div id="pagination" class="pagination"></div>
         </div>
     </div>
 
@@ -39,6 +40,11 @@
                     <label for="image">Featured Image (JPG/PNG)</label>
                     <input type="file" id="image" name="image" accept=".jpg,.jpeg,.png" style="padding: 0.5rem;">
                 </div>
+                <div class="form-group">
+                    <label for="link_image">Or Image URL</label>
+                    <input type="url" id="link_image" name="link_image" placeholder="https://example.com/image.jpg">
+                </div>
+                <div id="image-preview" class="image-preview"></div>
                 <div class="form-group">
                     <label for="content">Article Content</label>
                     <textarea id="content" name="content" required></textarea>
@@ -57,15 +63,78 @@
         </div>
     </div>
 
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <p>&copy; 2025 News Tribune. All rights reserved.</p>
+                </div>
+                <div class="footer-section">
+                    <div class="social-links">
+                        <a href="https://x.com/elonmusk" target="_blank">𝕏</a>
+                        <a href="https://facebook.com/elonmusk" target="_blank">Facebook</a>
+                        <a href="https://instagram.com/elonmusk" target="_blank">Instagram</a>
+                        <a href="https://linkedin.com/in/elonmusk" target="_blank">LinkedIn</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
     <script>
         const POCKETBASE_URL = 'https://app.flashreport.rest';
         let currentPosts = [];
+        let currentPage = 1;
+        let totalPages = 1;
+        const postsPerPage = 12;
         
         document.addEventListener('DOMContentLoaded', function() {
             loadPosts();
             document.getElementById('post-form').addEventListener('submit', handleSubmit);
+            
+            // Image preview handlers
+            document.getElementById('image').addEventListener('change', handleFilePreview);
+            document.getElementById('link_image').addEventListener('input', handleLinkPreview);
         });
+
+        function handleFilePreview(e) {
+            const file = e.target.files[0];
+            const linkInput = document.getElementById('link_image');
+            const preview = document.getElementById('image-preview');
+            
+            if (file) {
+                linkInput.value = ''; // Clear link input
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.innerHTML = `<img src="${e.target.result}" alt="Preview" class="preview-image">`;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                preview.innerHTML = '';
+            }
+        }
+
+        function handleLinkPreview(e) {
+            const url = e.target.value;
+            const fileInput = document.getElementById('image');
+            const preview = document.getElementById('image-preview');
+            
+            if (url) {
+                fileInput.value = ''; // Clear file input
+                if (isValidImageUrl(url)) {
+                    preview.innerHTML = `<img src="${url}" alt="Preview" class="preview-image" onerror="this.parentElement.innerHTML='<p class=error-preview>Failed to load image</p>'">`;
+                } else {
+                    preview.innerHTML = '<p class="error-preview">Please enter a valid image URL</p>';
+                }
+            } else {
+                preview.innerHTML = '';
+            }
+        }
+
+        function isValidImageUrl(url) {
+            return /\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url) || url.includes('ichef.bbci.co.uk') || url.includes('images.');
+        }
 
         function showHome() {
             document.getElementById('home-page').style.display = 'block';
@@ -135,6 +204,7 @@
             const title = document.getElementById('title').value.trim();
             const content = document.getElementById('content').value.trim();
             const imageFile = document.getElementById('image').files[0];
+            const linkImage = document.getElementById('link_image').value.trim();
             
             try {
                 // Check for duplicates
@@ -148,8 +218,9 @@
                 formData.append('title', title);
                 formData.append('post', content);
                 formData.append('likes', '0');
+                formData.append('link_image', linkImage);
                 
-                if (imageFile) {
+                if (imageFile && !linkImage) {
                     formData.append('image', imageFile);
                 }
                 
@@ -161,6 +232,7 @@
                 if (response.ok) {
                     showMessage('Article published successfully!', 'success');
                     document.getElementById('post-form').reset();
+                    document.getElementById('image-preview').innerHTML = '';
                     setTimeout(() => showHome(), 1000);
                     loadPosts();
                 } else {
@@ -175,24 +247,31 @@
             }
         }
 
-        async function loadPosts() {
+        async function loadPosts(page = 1) {
             try {
-                const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records?sort=-likes,-created&perPage=50`);
+                const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records?sort=-likes,-created&perPage=${postsPerPage}&page=${page}`);
                 const data = await response.json();
                 currentPosts = data.items || [];
+                currentPage = page;
+                totalPages = data.totalPages || 1;
                 
-                if (currentPosts.length === 0) {
+                if (currentPosts.length === 0 && page === 1) {
                     document.getElementById('main-content').innerHTML = '<div class="loading">No articles yet.</div>';
+                    document.getElementById('pagination').innerHTML = '';
                     return;
                 }
                 
                 renderPosts();
+                renderPagination();
             } catch (error) {
                 document.getElementById('main-content').innerHTML = '<div class="error">Failed to load articles</div>';
             }
         }
 
         function getImageUrl(record) {
+            if (record.link_image) {
+                return record.link_image;
+            }
             if (record.image) {
                 return `${POCKETBASE_URL}/api/files/${record.collectionName}/${record.id}/${record.image}`;
             }
@@ -200,57 +279,112 @@
         }
 
         function renderPosts() {
-            const featured = currentPosts[0];
-            const regular = currentPosts.slice(1, 7);
-            const trending = currentPosts.slice(7, 12);
-            
-            const featuredHTML = featured ? `
-                <div class="featured-post" onclick="showPost('${featured.id}')">
-                    <h2>${escapeHtml(featured.title)}</h2>
-                    <div class="meta">${formatDate(featured.created)} • ${featured.likes || 0} likes</div>
-                    ${getImageUrl(featured) ? `<img src="${getImageUrl(featured)}" alt="${escapeHtml(featured.title)}" class="featured-image">` : ''}
-                    <div class="excerpt">${escapeHtml(getExcerpt(featured.post, 200))}</div>
-                    <div class="meta-bottom">
-                        <button class="like-btn" onclick="event.stopPropagation(); likePost('${featured.id}', this)">
-                            ♥ ${featured.likes || 0}
-                        </button>
+            if (currentPage === 1) {
+                // Show featured layout for first page
+                const featured = currentPosts[0];
+                const regular = currentPosts.slice(1, 7);
+                const trending = currentPosts.slice(7, 12);
+                
+                const featuredHTML = featured ? `
+                    <div class="featured-post" onclick="showPost('${featured.id}')">
+                        <h2>${escapeHtml(featured.title)}</h2>
+                        <div class="meta">${formatDate(featured.created)} • ${featured.likes || 0} likes</div>
+                        ${getImageUrl(featured) ? `<img src="${getImageUrl(featured)}" alt="${escapeHtml(featured.title)}" class="featured-image">` : ''}
+                        <div class="excerpt">${escapeHtml(getExcerpt(featured.post, 200))}</div>
+                        <div class="meta-bottom">
+                            <button class="like-btn" onclick="event.stopPropagation(); likePost('${featured.id}', this)">
+                                ♥ ${featured.likes || 0}
+                            </button>
+                        </div>
                     </div>
-                </div>
-            ` : '';
-            
-            const regularHTML = regular.map(post => `
-                <div class="post-card" onclick="showPost('${post.id}')">
-                    <h3>${escapeHtml(post.title)}</h3>
-                    <div class="meta">${formatDate(post.created)}</div>
-                    ${getImageUrl(post) ? `<img src="${getImageUrl(post)}" alt="${escapeHtml(post.title)}" class="post-image">` : ''}
-                    <div class="excerpt">${escapeHtml(getExcerpt(post.post, 120))}</div>
-                    <div class="meta">
-                        <span></span>
-                        <button class="like-btn" onclick="event.stopPropagation(); likePost('${post.id}', this)">
-                            ♥ ${post.likes || 0}
-                        </button>
+                ` : '';
+                
+                const regularHTML = regular.map(post => `
+                    <div class="post-card" onclick="showPost('${post.id}')">
+                        <h3>${escapeHtml(post.title)}</h3>
+                        <div class="meta">${formatDate(post.created)}</div>
+                        ${getImageUrl(post) ? `<img src="${getImageUrl(post)}" alt="${escapeHtml(post.title)}" class="post-image">` : ''}
+                        <div class="excerpt">${escapeHtml(getExcerpt(post.post, 120))}</div>
+                        <div class="meta">
+                            <span></span>
+                            <button class="like-btn" onclick="event.stopPropagation(); likePost('${post.id}', this)">
+                                ♥ ${post.likes || 0}
+                            </button>
+                        </div>
                     </div>
-                </div>
-            `).join('');
+                `).join('');
+                
+                const trendingHTML = trending.map(post => `
+                    <div class="trending-post" onclick="showPost('${post.id}')">
+                        <h4>${escapeHtml(post.title)}</h4>
+                        <div style="font-size: 0.8rem; color: #999;">${post.likes || 0} likes</div>
+                    </div>
+                `).join('');
+                
+                document.getElementById('main-content').innerHTML = `
+                    ${featuredHTML}
+                    <div class="posts-grid">
+                        ${regularHTML}
+                    </div>
+                    <div class="sidebar">
+                        <h3>Trending</h3>
+                        ${trendingHTML}
+                        <button class="btn" onclick="removeDuplicates()" style="margin-top: 2rem; font-size: 0.9rem; padding: 0.5rem 1rem;">Clean Duplicates</button>
+                    </div>
+                `;
+            } else {
+                // Show grid layout for other pages
+                const postsHTML = currentPosts.map(post => `
+                    <div class="post-card" onclick="showPost('${post.id}')">
+                        <h3>${escapeHtml(post.title)}</h3>
+                        <div class="meta">${formatDate(post.created)}</div>
+                        ${getImageUrl(post) ? `<img src="${getImageUrl(post)}" alt="${escapeHtml(post.title)}" class="post-image">` : ''}
+                        <div class="excerpt">${escapeHtml(getExcerpt(post.post, 120))}</div>
+                        <div class="meta">
+                            <span></span>
+                            <button class="like-btn" onclick="event.stopPropagation(); likePost('${post.id}', this)">
+                                ♥ ${post.likes || 0}
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+                
+                document.getElementById('main-content').innerHTML = `
+                    <div class="posts-grid-full">
+                        ${postsHTML}
+                    </div>
+                `;
+            }
+        }
+
+        function renderPagination() {
+            if (totalPages <= 1) {
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+
+            let paginationHTML = '';
             
-            const trendingHTML = trending.map(post => `
-                <div class="trending-post" onclick="showPost('${post.id}')">
-                    <h4>${escapeHtml(post.title)}</h4>
-                    <div style="font-size: 0.8rem; color: #999;">${post.likes || 0} likes</div>
-                </div>
-            `).join('');
+            // Previous button
+            if (currentPage > 1) {
+                paginationHTML += `<button class="pagination-btn" onclick="loadPosts(${currentPage - 1})">← Previous</button>`;
+            }
             
-            document.getElementById('main-content').innerHTML = `
-                ${featuredHTML}
-                <div class="posts-grid">
-                    ${regularHTML}
-                </div>
-                <div class="sidebar">
-                    <h3>Trending</h3>
-                    ${trendingHTML}
-                    <button class="btn" onclick="removeDuplicates()" style="margin-top: 2rem; font-size: 0.9rem; padding: 0.5rem 1rem;">Clean Duplicates</button>
-                </div>
-            `;
+            // Page numbers
+            for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+                if (i === currentPage) {
+                    paginationHTML += `<button class="pagination-btn active">${i}</button>`;
+                } else {
+                    paginationHTML += `<button class="pagination-btn" onclick="loadPosts(${i})">${i}</button>`;
+                }
+            }
+            
+            // Next button
+            if (currentPage < totalPages) {
+                paginationHTML += `<button class="pagination-btn" onclick="loadPosts(${currentPage + 1})">Next →</button>`;
+            }
+            
+            document.getElementById('pagination').innerHTML = paginationHTML;
         }
 
         async function likePost(id, btn) {
@@ -323,7 +457,11 @@
             setTimeout(() => div.remove(), 3000);
         }
 
-        setInterval(loadPosts, 60000);
+        setInterval(() => {
+            if (document.getElementById('home-page').style.display !== 'none') {
+                loadPosts(currentPage);
+            }
+        }, 60000);
     </script>
 </body>
 </html>
