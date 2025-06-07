@@ -428,3 +428,18 @@ body {
 .social-links a:hover {
     color: #c41e3a;
 }
+
+/* reCAPTCHA Styles */
+.g-recaptcha {
+    margin: 1rem 0;
+}
+
+.recaptcha-error {
+    color: #721c24;
+    background: #f8d7da;
+    padding: 0.5rem;
+    border-radius: 3px;
+    border: 1px solid #f5c6cb;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
