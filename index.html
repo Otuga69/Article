@@ -6,6 +6,7 @@
     <title>News Tribune</title>
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2099519216159666"
      crossorigin="anonymous"></script>
+    <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -48,6 +49,12 @@
                 <div class="form-group">
                     <label for="content">Article Content</label>
                     <textarea id="content" name="content" required></textarea>
+                </div>
+                <div class="form-group">
+                    <div class="g-recaptcha" data-sitekey="6LdqKVgrAAAAAFvfWDOxKeUU1qk0GwR1_9imeNjV"></div>
+                    <div id="recaptcha-error" class="recaptcha-error" style="display: none;">
+                        Please complete the reCAPTCHA verification
+                    </div>
                 </div>
                 <button type="submit" class="btn" id="submit-btn">Publish Article</button>
             </form>
@@ -193,12 +200,55 @@
             }
         }
 
+        async function verifyRecaptcha(token) {
+            try {
+                const response = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `secret=6LdqKVgrAAAAADZ9gAC4pp8loK8_Uk0E4-A-hfF0&response=${token}`
+                });
+                
+                const data = await response.json();
+                return data.success;
+            } catch (error) {
+                console.error('reCAPTCHA verification failed:', error);
+                return false;
+            }
+        }
+
         async function handleSubmit(e) {
             e.preventDefault();
+            
+            // Check reCAPTCHA
+            const recaptchaResponse = grecaptcha.getResponse();
+            const recaptchaError = document.getElementById('recaptcha-error');
+            
+            if (!recaptchaResponse) {
+                recaptchaError.style.display = 'block';
+                recaptchaError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                return;
+            }
+            
+            recaptchaError.style.display = 'none';
             
             const submitBtn = document.getElementById('submit-btn');
             const originalText = submitBtn.textContent;
             submitBtn.disabled = true;
+            submitBtn.textContent = 'Verifying...';
+            
+            // Verify reCAPTCHA server-side (Note: This is client-side verification for demo)
+            // In production, you should verify on your backend server
+            const isRecaptchaValid = await verifyRecaptcha(recaptchaResponse);
+            if (!isRecaptchaValid) {
+                showMessage('reCAPTCHA verification failed. Please try again.', 'error');
+                grecaptcha.reset();
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+                return;
+            }
+            
             submitBtn.textContent = 'Publishing...';
             
             const title = document.getElementById('title').value.trim();
@@ -219,6 +269,7 @@
                 formData.append('post', content);
                 formData.append('likes', '0');
                 formData.append('link_image', linkImage);
+                formData.append('recaptcha_token', recaptchaResponse);
                 
                 if (imageFile && !linkImage) {
                     formData.append('image', imageFile);
@@ -233,14 +284,17 @@
                     showMessage('Article published successfully!', 'success');
                     document.getElementById('post-form').reset();
                     document.getElementById('image-preview').innerHTML = '';
+                    grecaptcha.reset();
                     setTimeout(() => showHome(), 1000);
                     loadPosts();
                 } else {
                     const errorData = await response.json();
                     showMessage(`Failed to publish: ${errorData.message || 'Unknown error'}`, 'error');
+                    grecaptcha.reset();
                 }
             } catch (error) {
                 showMessage('Error: ' + error.message, 'error');
+                grecaptcha.reset();
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.textContent = originalText;
