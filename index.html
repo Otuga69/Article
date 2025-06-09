@@ -12,9 +12,9 @@
     <header class="header">
         <div class="header-content">
             <div class="logo">NEWS TRIBUNE</div>
-            <nav class="nav">
-                <a href="#" onclick="navigateToHome()">Home</a>
-                <a href="#" onclick="showCreate()" id="write-nav" style="display: none;">Write</a>
+            <nav class="nav" id="main-nav">
+                <a href="#" onclick="showHome()">Home</a>
+                <a href="#" onclick="showCreate()" id="write-link">Write</a>
             </nav>
         </div>
     </header>
@@ -28,7 +28,7 @@
         </div>
     </div>
 
-    <div id="create-page" class="create-page" style="display: none;">
+    <div id="create-page" class="create-page">
         <div class="container">
             <h1>Write Article</h1>
             <form id="post-form">
@@ -54,12 +54,18 @@
         </div>
     </div>
 
-    <div id="post-view" class="post-view" style="display: none;">
+    <div id="post-view" class="post-view">
         <div class="container">
-            <button class="btn back-btn" onclick="navigateToHome()">← Back</button>
+            <button class="btn back-btn" onclick="showHome()">← Back</button>
             <h1 id="post-view-title"></h1>
             <div id="post-view-meta" class="meta"></div>
             <div id="post-view-content" class="content"></div>
+        </div>
+    </div>
+
+    <div id="fallback-article" class="fallback-article" style="display: none;">
+        <div class="container">
+            <div id="fallback-content" class="fallback-content"></div>
         </div>
     </div>
 
@@ -88,172 +94,123 @@
         let currentPage = 1;
         let totalPages = 1;
         const postsPerPage = 12;
-        let fallbackMode = false;
-        let fallbackPosts = [];
-        
-        // Router functionality
-        class Router {
-            constructor() {
-                this.routes = new Map();
-                this.currentRoute = null;
-                
-                // Handle browser navigation
-                window.addEventListener('popstate', () => this.handleRoute());
-                
-                // Handle initial load
-                this.handleRoute();
-            }
-            
-            addRoute(pattern, handler) {
-                this.routes.set(pattern, handler);
-            }
-            
-            navigate(path, pushState = true) {
-                if (pushState) {
-                    history.pushState(null, '', path);
-                }
-                this.handleRoute();
-            }
-            
-            handleRoute() {
-                const path = window.location.pathname;
-                const hash = window.location.hash;
-                
-                // Handle article routes: /{id} or /{id}#section
-                const articleMatch = path.match(/^\/([a-zA-Z0-9_-]+)$/);
-                if (articleMatch) {
-                    const articleId = articleMatch[1];
-                    this.showArticleById(articleId);
-                    return;
-                }
-                
-                // Default to home
-                if (path === '/') {
-                    showHome();
-                    return;
-                }
-                
-                // Fallback to home for unknown routes
-                showHome();
-            }
-            
-            async showArticleById(id) {
-                // Wait for posts to load if not already loaded
-                if (currentPosts.length === 0 && fallbackPosts.length === 0) {
-                    await loadInitialData();
-                }
-                
-                const posts = fallbackMode ? fallbackPosts : currentPosts;
-                const post = posts.find(p => p.id === id);
-                
-                if (post) {
-                    showPost(id, false); // Don't push state since we're handling routing
-                } else {
-                    // Redirect to home if post not found
-                    this.navigate('/', true);
-                }
-            }
-        }
-        
-        const router = new Router();
+        let isPocketBaseAvailable = true;
+        let fallbackContent = null;
         
         document.addEventListener('DOMContentLoaded', function() {
-            loadInitialData();
-            document.getElementById('post-form').addEventListener('submit', handleSubmit);
+            initializeRouter();
+            loadInitialContent();
             
-            // Image preview handlers
-            document.getElementById('image').addEventListener('change', handleFilePreview);
-            document.getElementById('link_image').addEventListener('input', handleLinkPreview);
+            if (isPocketBaseAvailable) {
+                document.getElementById('post-form').addEventListener('submit', handleSubmit);
+                
+                // Image preview handlers
+                document.getElementById('image').addEventListener('change', handleFilePreview);
+                document.getElementById('link_image').addEventListener('input', handleLinkPreview);
+            }
+            
+            // Handle browser back/forward
+            window.addEventListener('popstate', handleRouteChange);
         });
 
-        async function loadInitialData() {
+        function initializeRouter() {
+            const path = window.location.pathname;
+            const pathSegments = path.split('/').filter(segment => segment);
+            
+            if (pathSegments.length > 0) {
+                const postId = pathSegments[pathSegments.length - 1];
+                // Try to load specific post from URL
+                loadSpecificPost(postId);
+            }
+        }
+
+        function updateURL(path) {
+            const newURL = window.location.origin + '/' + path;
+            window.history.pushState({ path }, '', newURL);
+        }
+
+        function handleRouteChange() {
+            const path = window.location.pathname;
+            const pathSegments = path.split('/').filter(segment => segment);
+            
+            if (pathSegments.length === 0) {
+                showHome();
+            } else {
+                const postId = pathSegments[pathSegments.length - 1];
+                loadSpecificPost(postId);
+            }
+        }
+
+        async function loadInitialContent() {
             try {
                 await loadPosts();
             } catch (error) {
-                console.warn('PocketBase failed, switching to fallback mode:', error);
-                await loadFallbackData();
+                console.log('PocketBase failed, loading fallback content');
+                await loadFallbackContent();
             }
         }
 
-        async function loadFallbackData() {
+        async function loadFallbackContent() {
             try {
                 const response = await fetch('./blog.md');
-                if (!response.ok) throw new Error('Failed to load blog.md');
+                if (!response.ok) {
+                    throw new Error('Failed to load blog.md');
+                }
                 
-                const markdown = await response.text();
-                fallbackPosts = parseBlogMarkdown(markdown);
-                fallbackMode = true;
+                const markdownContent = await response.text();
+                isPocketBaseAvailable = false;
+                fallbackContent = markdownContent;
                 
-                // Hide write functionality in fallback mode
-                document.getElementById('write-nav').style.display = 'none';
+                // Hide write functionality
+                const writeLink = document.getElementById('write-link');
+                if (writeLink) {
+                    writeLink.style.display = 'none';
+                }
                 
-                renderFallbackPosts();
-                showMessage('Running in offline mode - using local content', 'info');
+                // Show fallback content
+                showFallbackContent();
+                
             } catch (error) {
-                console.error('Fallback data loading failed:', error);
+                console.error('Failed to load fallback content:', error);
                 document.getElementById('main-content').innerHTML = 
                     '<div class="error">Failed to load content. Please check your connection.</div>';
             }
         }
 
-        function parseBlogMarkdown(markdown) {
-            const posts = [];
-            const sections = markdown.split(/^---\s*$/gm);
+        function showFallbackContent() {
+            document.getElementById('home-page').style.display = 'none';
+            document.getElementById('create-page').style.display = 'none';
+            document.getElementById('post-view').style.display = 'none';
+            document.getElementById('fallback-article').style.display = 'block';
             
-            sections.forEach((section, index) => {
-                if (section.trim()) {
-                    const lines = section.trim().split('\n');
-                    const frontMatter = {};
-                    let contentStart = 0;
-                    
-                    // Parse front matter if exists
-                    if (lines[0] === '---' || section.startsWith('---')) {
-                        for (let i = 1; i < lines.length; i++) {
-                            if (lines[i] === '---') {
-                                contentStart = i + 1;
-                                break;
-                            }
-                            const [key, ...valueParts] = lines[i].split(':');
-                            if (key && valueParts.length) {
-                                frontMatter[key.trim()] = valueParts.join(':').trim();
-                            }
-                        }
-                    }
-                    
-                    const content = lines.slice(contentStart).join('\n').trim();
-                    
-                    if (content) {
-                        const title = frontMatter.title || content.split('\n')[0].replace(/^#+\s*/, '') || `Article ${index + 1}`;
-                        
-                        posts.push({
-                            id: frontMatter.id || `fallback-${index}`,
-                            title: title,
-                            post: content,
-                            created: frontMatter.date || new Date().toISOString(),
-                            likes: parseInt(frontMatter.likes) || 0,
-                            image: frontMatter.image || null,
-                            link_image: frontMatter.link_image || null,
-                            collectionName: 'posts'
-                        });
-                    }
+            const parsedContent = marked.parse(fallbackContent);
+            document.getElementById('fallback-content').innerHTML = parsedContent;
+        }
+
+        async function loadSpecificPost(postId) {
+            if (!isPocketBaseAvailable) {
+                showFallbackContent();
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records/${postId}`);
+                if (!response.ok) {
+                    throw new Error('Post not found');
                 }
-            });
-            
-            return posts.sort((a, b) => new Date(b.created) - new Date(a.created));
-        }
-
-        function renderFallbackPosts() {
-            currentPosts = fallbackPosts;
-            totalPages = Math.ceil(fallbackPosts.length / postsPerPage);
-            renderPosts();
-            document.getElementById('pagination').innerHTML = ''; // Disable pagination for fallback
-        }
-
-        function navigateToHome() {
-            router.navigate('/', true);
+                
+                const post = await response.json();
+                showPostDirect(post);
+                
+            } catch (error) {
+                console.error('Failed to load specific post:', error);
+                showHome();
+            }
         }
 
         function handleFilePreview(e) {
+            if (!isPocketBaseAvailable) return;
+            
             const file = e.target.files[0];
             const linkInput = document.getElementById('link_image');
             const preview = document.getElementById('image-preview');
@@ -271,6 +228,8 @@
         }
 
         function handleLinkPreview(e) {
+            if (!isPocketBaseAvailable) return;
+            
             const url = e.target.value;
             const fileInput = document.getElementById('image');
             const preview = document.getElementById('image-preview');
@@ -292,23 +251,30 @@
         }
 
         function showHome() {
+            if (!isPocketBaseAvailable) {
+                showFallbackContent();
+                return;
+            }
+            
             document.getElementById('home-page').style.display = 'block';
             document.getElementById('create-page').style.display = 'none';
             document.getElementById('post-view').style.display = 'none';
+            document.getElementById('fallback-article').style.display = 'none';
+            
+            updateURL('');
         }
 
         function showCreate() {
-            if (fallbackMode) {
-                showMessage('Write functionality not available in offline mode', 'error');
-                return;
-            }
+            if (!isPocketBaseAvailable) return;
+            
             document.getElementById('home-page').style.display = 'none';
             document.getElementById('create-page').style.display = 'block';
             document.getElementById('post-view').style.display = 'none';
+            document.getElementById('fallback-article').style.display = 'none';
         }
 
         async function checkForDuplicates(title, content) {
-            if (fallbackMode) return false;
+            if (!isPocketBaseAvailable) return false;
             
             try {
                 const filter = encodeURIComponent(`title="${title}" || post="${content}"`);
@@ -322,10 +288,7 @@
         }
 
         async function removeDuplicates() {
-            if (fallbackMode) {
-                showMessage('Duplicate removal not available in offline mode', 'error');
-                return;
-            }
+            if (!isPocketBaseAvailable) return;
             
             try {
                 const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records?perPage=500`);
@@ -360,12 +323,9 @@
         }
 
         async function handleSubmit(e) {
-            e.preventDefault();
+            if (!isPocketBaseAvailable) return;
             
-            if (fallbackMode) {
-                showMessage('Publishing not available in offline mode', 'error');
-                return;
-            }
+            e.preventDefault();
             
             const submitBtn = document.getElementById('submit-btn');
             const originalText = submitBtn.textContent;
@@ -404,7 +364,7 @@
                     showMessage('Article published successfully!', 'success');
                     document.getElementById('post-form').reset();
                     document.getElementById('image-preview').innerHTML = '';
-                    setTimeout(() => navigateToHome(), 1000);
+                    setTimeout(() => showHome(), 1000);
                     loadPosts();
                 } else {
                     const errorData = await response.json();
@@ -419,25 +379,17 @@
         }
 
         async function loadPosts(page = 1) {
-            if (fallbackMode) {
-                renderFallbackPosts();
-                return;
-            }
-            
             try {
                 const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records?sort=-likes,-created&perPage=${postsPerPage}&page=${page}`);
                 
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    throw new Error('PocketBase unavailable');
                 }
                 
                 const data = await response.json();
                 currentPosts = data.items || [];
                 currentPage = page;
                 totalPages = data.totalPages || 1;
-                
-                // Show write functionality since PocketBase is working
-                document.getElementById('write-nav').style.display = 'inline';
                 
                 if (currentPosts.length === 0 && page === 1) {
                     document.getElementById('main-content').innerHTML = '<div class="loading">No articles yet.</div>';
@@ -448,8 +400,9 @@
                 renderPosts();
                 renderPagination();
             } catch (error) {
-                console.error('PocketBase load failed:', error);
-                await loadFallbackData();
+                console.error('PocketBase failed:', error);
+                isPocketBaseAvailable = false;
+                await loadFallbackContent();
             }
         }
 
@@ -457,18 +410,15 @@
             if (record.link_image) {
                 return record.link_image;
             }
-            if (record.image && !fallbackMode) {
+            if (record.image) {
                 return `${POCKETBASE_URL}/api/files/${record.collectionName}/${record.id}/${record.image}`;
-            }
-            if (record.image && fallbackMode) {
-                return record.image; // In fallback mode, assume it's a direct URL
             }
             return null;
         }
 
         function renderPosts() {
-            if (currentPage === 1 && !fallbackMode) {
-                // Show featured layout for first page (PocketBase mode only)
+            if (currentPage === 1) {
+                // Show featured layout for first page
                 const featured = currentPosts[0];
                 const regular = currentPosts.slice(1, 7);
                 const trending = currentPosts.slice(7, 12);
@@ -517,11 +467,11 @@
                     <div class="sidebar">
                         <h3>Trending</h3>
                         ${trendingHTML}
-                        ${!fallbackMode ? '<button class="btn" onclick="removeDuplicates()" style="margin-top: 2rem; font-size: 0.9rem; padding: 0.5rem 1rem;">Clean Duplicates</button>' : ''}
+                        <button class="btn" onclick="removeDuplicates()" style="margin-top: 2rem; font-size: 0.9rem; padding: 0.5rem 1rem;">Clean Duplicates</button>
                     </div>
                 `;
             } else {
-                // Show grid layout for other pages or fallback mode
+                // Show grid layout for other pages
                 const postsHTML = currentPosts.map(post => `
                     <div class="post-card" onclick="showPost('${post.id}')">
                         <h3>${escapeHtml(post.title)}</h3>
@@ -530,7 +480,9 @@
                         <div class="excerpt">${escapeHtml(getExcerpt(post.post, 120))}</div>
                         <div class="meta">
                             <span></span>
-                            ${!fallbackMode ? `<button class="like-btn" onclick="event.stopPropagation(); likePost('${post.id}', this)">♥ ${post.likes || 0}</button>` : `<span>♥ ${post.likes || 0}</span>`}
+                            <button class="like-btn" onclick="event.stopPropagation(); likePost('${post.id}', this)">
+                                ♥ ${post.likes || 0}
+                            </button>
                         </div>
                     </div>
                 `).join('');
@@ -544,7 +496,7 @@
         }
 
         function renderPagination() {
-            if (totalPages <= 1 || fallbackMode) {
+            if (totalPages <= 1) {
                 document.getElementById('pagination').innerHTML = '';
                 return;
             }
@@ -574,10 +526,7 @@
         }
 
         async function likePost(id, btn) {
-            if (fallbackMode) {
-                showMessage('Liking not available in offline mode', 'info');
-                return;
-            }
+            if (!isPocketBaseAvailable) return;
             
             try {
                 const post = currentPosts.find(p => p.id === id);
@@ -599,19 +548,19 @@
             }
         }
 
-        function showPost(id, updateUrl = true) {
-            const posts = fallbackMode ? fallbackPosts : currentPosts;
-            const post = posts.find(p => p.id === id);
+        function showPost(id) {
+            const post = currentPosts.find(p => p.id === id);
             if (!post) return;
             
-            // Update URL if requested
-            if (updateUrl) {
-                router.navigate(`/${id}`, true);
-            }
-            
+            showPostDirect(post);
+            updateURL(id);
+        }
+
+        function showPostDirect(post) {
             document.getElementById('home-page').style.display = 'none';
             document.getElementById('create-page').style.display = 'none';
             document.getElementById('post-view').style.display = 'block';
+            document.getElementById('fallback-article').style.display = 'none';
             
             document.getElementById('post-view-title').textContent = post.title;
             document.getElementById('post-view-meta').innerHTML = `
@@ -650,26 +599,14 @@
             const div = document.createElement('div');
             div.className = `message ${type}`;
             div.textContent = message;
-            div.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 12px 20px;
-                border-radius: 4px;
-                color: white;
-                z-index: 1000;
-                font-weight: 500;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                background-color: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
-            `;
             
-            document.body.appendChild(div);
+            document.getElementById('create-page').querySelector('.container').appendChild(div);
             setTimeout(() => div.remove(), 3000);
         }
 
-        // Auto-refresh for PocketBase mode only
+        // Only refresh if PocketBase is available
         setInterval(() => {
-            if (!fallbackMode && document.getElementById('home-page').style.display !== 'none') {
+            if (isPocketBaseAvailable && document.getElementById('home-page').style.display !== 'none') {
                 loadPosts(currentPage);
             }
         }, 60000);
