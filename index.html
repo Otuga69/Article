@@ -13,8 +13,8 @@
         <div class="header-content">
             <div class="logo">NEWS TRIBUNE</div>
             <nav class="nav">
-                <a href="#" onclick="showHome()">Home</a>
-                <a href="#" onclick="showCreate()">Write</a>
+                <a href="#" onclick="navigateToHome()">Home</a>
+                <a href="#" onclick="showCreate()" id="write-nav" style="display: none;">Write</a>
             </nav>
         </div>
     </header>
@@ -28,7 +28,7 @@
         </div>
     </div>
 
-    <div id="create-page" class="create-page">
+    <div id="create-page" class="create-page" style="display: none;">
         <div class="container">
             <h1>Write Article</h1>
             <form id="post-form">
@@ -54,9 +54,9 @@
         </div>
     </div>
 
-    <div id="post-view" class="post-view">
+    <div id="post-view" class="post-view" style="display: none;">
         <div class="container">
-            <button class="btn back-btn" onclick="showHome()">← Back</button>
+            <button class="btn back-btn" onclick="navigateToHome()">← Back</button>
             <h1 id="post-view-title"></h1>
             <div id="post-view-meta" class="meta"></div>
             <div id="post-view-content" class="content"></div>
@@ -88,15 +88,170 @@
         let currentPage = 1;
         let totalPages = 1;
         const postsPerPage = 12;
+        let fallbackMode = false;
+        let fallbackPosts = [];
+        
+        // Router functionality
+        class Router {
+            constructor() {
+                this.routes = new Map();
+                this.currentRoute = null;
+                
+                // Handle browser navigation
+                window.addEventListener('popstate', () => this.handleRoute());
+                
+                // Handle initial load
+                this.handleRoute();
+            }
+            
+            addRoute(pattern, handler) {
+                this.routes.set(pattern, handler);
+            }
+            
+            navigate(path, pushState = true) {
+                if (pushState) {
+                    history.pushState(null, '', path);
+                }
+                this.handleRoute();
+            }
+            
+            handleRoute() {
+                const path = window.location.pathname;
+                const hash = window.location.hash;
+                
+                // Handle article routes: /{id} or /{id}#section
+                const articleMatch = path.match(/^\/([a-zA-Z0-9_-]+)$/);
+                if (articleMatch) {
+                    const articleId = articleMatch[1];
+                    this.showArticleById(articleId);
+                    return;
+                }
+                
+                // Default to home
+                if (path === '/') {
+                    showHome();
+                    return;
+                }
+                
+                // Fallback to home for unknown routes
+                showHome();
+            }
+            
+            async showArticleById(id) {
+                // Wait for posts to load if not already loaded
+                if (currentPosts.length === 0 && fallbackPosts.length === 0) {
+                    await loadInitialData();
+                }
+                
+                const posts = fallbackMode ? fallbackPosts : currentPosts;
+                const post = posts.find(p => p.id === id);
+                
+                if (post) {
+                    showPost(id, false); // Don't push state since we're handling routing
+                } else {
+                    // Redirect to home if post not found
+                    this.navigate('/', true);
+                }
+            }
+        }
+        
+        const router = new Router();
         
         document.addEventListener('DOMContentLoaded', function() {
-            loadPosts();
+            loadInitialData();
             document.getElementById('post-form').addEventListener('submit', handleSubmit);
             
             // Image preview handlers
             document.getElementById('image').addEventListener('change', handleFilePreview);
             document.getElementById('link_image').addEventListener('input', handleLinkPreview);
         });
+
+        async function loadInitialData() {
+            try {
+                await loadPosts();
+            } catch (error) {
+                console.warn('PocketBase failed, switching to fallback mode:', error);
+                await loadFallbackData();
+            }
+        }
+
+        async function loadFallbackData() {
+            try {
+                const response = await fetch('./blog.md');
+                if (!response.ok) throw new Error('Failed to load blog.md');
+                
+                const markdown = await response.text();
+                fallbackPosts = parseBlogMarkdown(markdown);
+                fallbackMode = true;
+                
+                // Hide write functionality in fallback mode
+                document.getElementById('write-nav').style.display = 'none';
+                
+                renderFallbackPosts();
+                showMessage('Running in offline mode - using local content', 'info');
+            } catch (error) {
+                console.error('Fallback data loading failed:', error);
+                document.getElementById('main-content').innerHTML = 
+                    '<div class="error">Failed to load content. Please check your connection.</div>';
+            }
+        }
+
+        function parseBlogMarkdown(markdown) {
+            const posts = [];
+            const sections = markdown.split(/^---\s*$/gm);
+            
+            sections.forEach((section, index) => {
+                if (section.trim()) {
+                    const lines = section.trim().split('\n');
+                    const frontMatter = {};
+                    let contentStart = 0;
+                    
+                    // Parse front matter if exists
+                    if (lines[0] === '---' || section.startsWith('---')) {
+                        for (let i = 1; i < lines.length; i++) {
+                            if (lines[i] === '---') {
+                                contentStart = i + 1;
+                                break;
+                            }
+                            const [key, ...valueParts] = lines[i].split(':');
+                            if (key && valueParts.length) {
+                                frontMatter[key.trim()] = valueParts.join(':').trim();
+                            }
+                        }
+                    }
+                    
+                    const content = lines.slice(contentStart).join('\n').trim();
+                    
+                    if (content) {
+                        const title = frontMatter.title || content.split('\n')[0].replace(/^#+\s*/, '') || `Article ${index + 1}`;
+                        
+                        posts.push({
+                            id: frontMatter.id || `fallback-${index}`,
+                            title: title,
+                            post: content,
+                            created: frontMatter.date || new Date().toISOString(),
+                            likes: parseInt(frontMatter.likes) || 0,
+                            image: frontMatter.image || null,
+                            link_image: frontMatter.link_image || null,
+                            collectionName: 'posts'
+                        });
+                    }
+                }
+            });
+            
+            return posts.sort((a, b) => new Date(b.created) - new Date(a.created));
+        }
+
+        function renderFallbackPosts() {
+            currentPosts = fallbackPosts;
+            totalPages = Math.ceil(fallbackPosts.length / postsPerPage);
+            renderPosts();
+            document.getElementById('pagination').innerHTML = ''; // Disable pagination for fallback
+        }
+
+        function navigateToHome() {
+            router.navigate('/', true);
+        }
 
         function handleFilePreview(e) {
             const file = e.target.files[0];
@@ -143,12 +298,18 @@
         }
 
         function showCreate() {
+            if (fallbackMode) {
+                showMessage('Write functionality not available in offline mode', 'error');
+                return;
+            }
             document.getElementById('home-page').style.display = 'none';
             document.getElementById('create-page').style.display = 'block';
             document.getElementById('post-view').style.display = 'none';
         }
 
         async function checkForDuplicates(title, content) {
+            if (fallbackMode) return false;
+            
             try {
                 const filter = encodeURIComponent(`title="${title}" || post="${content}"`);
                 const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records?filter=${filter}`);
@@ -161,6 +322,11 @@
         }
 
         async function removeDuplicates() {
+            if (fallbackMode) {
+                showMessage('Duplicate removal not available in offline mode', 'error');
+                return;
+            }
+            
             try {
                 const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records?perPage=500`);
                 const data = await response.json();
@@ -195,6 +361,11 @@
 
         async function handleSubmit(e) {
             e.preventDefault();
+            
+            if (fallbackMode) {
+                showMessage('Publishing not available in offline mode', 'error');
+                return;
+            }
             
             const submitBtn = document.getElementById('submit-btn');
             const originalText = submitBtn.textContent;
@@ -233,7 +404,7 @@
                     showMessage('Article published successfully!', 'success');
                     document.getElementById('post-form').reset();
                     document.getElementById('image-preview').innerHTML = '';
-                    setTimeout(() => showHome(), 1000);
+                    setTimeout(() => navigateToHome(), 1000);
                     loadPosts();
                 } else {
                     const errorData = await response.json();
@@ -248,12 +419,25 @@
         }
 
         async function loadPosts(page = 1) {
+            if (fallbackMode) {
+                renderFallbackPosts();
+                return;
+            }
+            
             try {
                 const response = await fetch(`${POCKETBASE_URL}/api/collections/posts/records?sort=-likes,-created&perPage=${postsPerPage}&page=${page}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 currentPosts = data.items || [];
                 currentPage = page;
                 totalPages = data.totalPages || 1;
+                
+                // Show write functionality since PocketBase is working
+                document.getElementById('write-nav').style.display = 'inline';
                 
                 if (currentPosts.length === 0 && page === 1) {
                     document.getElementById('main-content').innerHTML = '<div class="loading">No articles yet.</div>';
@@ -264,7 +448,8 @@
                 renderPosts();
                 renderPagination();
             } catch (error) {
-                document.getElementById('main-content').innerHTML = '<div class="error">Failed to load articles</div>';
+                console.error('PocketBase load failed:', error);
+                await loadFallbackData();
             }
         }
 
@@ -272,15 +457,18 @@
             if (record.link_image) {
                 return record.link_image;
             }
-            if (record.image) {
+            if (record.image && !fallbackMode) {
                 return `${POCKETBASE_URL}/api/files/${record.collectionName}/${record.id}/${record.image}`;
+            }
+            if (record.image && fallbackMode) {
+                return record.image; // In fallback mode, assume it's a direct URL
             }
             return null;
         }
 
         function renderPosts() {
-            if (currentPage === 1) {
-                // Show featured layout for first page
+            if (currentPage === 1 && !fallbackMode) {
+                // Show featured layout for first page (PocketBase mode only)
                 const featured = currentPosts[0];
                 const regular = currentPosts.slice(1, 7);
                 const trending = currentPosts.slice(7, 12);
@@ -329,11 +517,11 @@
                     <div class="sidebar">
                         <h3>Trending</h3>
                         ${trendingHTML}
-                        <button class="btn" onclick="removeDuplicates()" style="margin-top: 2rem; font-size: 0.9rem; padding: 0.5rem 1rem;">Clean Duplicates</button>
+                        ${!fallbackMode ? '<button class="btn" onclick="removeDuplicates()" style="margin-top: 2rem; font-size: 0.9rem; padding: 0.5rem 1rem;">Clean Duplicates</button>' : ''}
                     </div>
                 `;
             } else {
-                // Show grid layout for other pages
+                // Show grid layout for other pages or fallback mode
                 const postsHTML = currentPosts.map(post => `
                     <div class="post-card" onclick="showPost('${post.id}')">
                         <h3>${escapeHtml(post.title)}</h3>
@@ -342,9 +530,7 @@
                         <div class="excerpt">${escapeHtml(getExcerpt(post.post, 120))}</div>
                         <div class="meta">
                             <span></span>
-                            <button class="like-btn" onclick="event.stopPropagation(); likePost('${post.id}', this)">
-                                ♥ ${post.likes || 0}
-                            </button>
+                            ${!fallbackMode ? `<button class="like-btn" onclick="event.stopPropagation(); likePost('${post.id}', this)">♥ ${post.likes || 0}</button>` : `<span>♥ ${post.likes || 0}</span>`}
                         </div>
                     </div>
                 `).join('');
@@ -358,7 +544,7 @@
         }
 
         function renderPagination() {
-            if (totalPages <= 1) {
+            if (totalPages <= 1 || fallbackMode) {
                 document.getElementById('pagination').innerHTML = '';
                 return;
             }
@@ -388,6 +574,11 @@
         }
 
         async function likePost(id, btn) {
+            if (fallbackMode) {
+                showMessage('Liking not available in offline mode', 'info');
+                return;
+            }
+            
             try {
                 const post = currentPosts.find(p => p.id === id);
                 const newLikes = (post.likes || 0) + 1;
@@ -408,11 +599,18 @@
             }
         }
 
-        function showPost(id) {
-            const post = currentPosts.find(p => p.id === id);
+        function showPost(id, updateUrl = true) {
+            const posts = fallbackMode ? fallbackPosts : currentPosts;
+            const post = posts.find(p => p.id === id);
             if (!post) return;
             
+            // Update URL if requested
+            if (updateUrl) {
+                router.navigate(`/${id}`, true);
+            }
+            
             document.getElementById('home-page').style.display = 'none';
+            document.getElementById('create-page').style.display = 'none';
             document.getElementById('post-view').style.display = 'block';
             
             document.getElementById('post-view-title').textContent = post.title;
@@ -452,13 +650,26 @@
             const div = document.createElement('div');
             div.className = `message ${type}`;
             div.textContent = message;
+            div.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 4px;
+                color: white;
+                z-index: 1000;
+                font-weight: 500;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                background-color: ${type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'};
+            `;
             
-            document.getElementById('create-page').querySelector('.container').appendChild(div);
+            document.body.appendChild(div);
             setTimeout(() => div.remove(), 3000);
         }
 
+        // Auto-refresh for PocketBase mode only
         setInterval(() => {
-            if (document.getElementById('home-page').style.display !== 'none') {
+            if (!fallbackMode && document.getElementById('home-page').style.display !== 'none') {
                 loadPosts(currentPage);
             }
         }, 60000);
