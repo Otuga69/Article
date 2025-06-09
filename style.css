@@ -443,3 +443,97 @@ body {
     margin-top: 0.5rem;
     font-size: 0.9rem;
 }
+
+.fallback-article {
+            min-height: 80vh;
+            padding: 2rem 0;
+        }
+        
+        .fallback-content {
+            max-width: 800px;
+            margin: 0 auto;
+            line-height: 1.8;
+            font-size: 1.1rem;
+        }
+        
+        .fallback-content h1, 
+        .fallback-content h2, 
+        .fallback-content h3 {
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+        
+        .fallback-content h1 {
+            font-size: 2.5rem;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 0.5rem;
+        }
+        
+        .fallback-content h2 {
+            font-size: 2rem;
+        }
+        
+        .fallback-content h3 {
+            font-size: 1.5rem;
+        }
+        
+        .fallback-content p {
+            margin-bottom: 1.5rem;
+            text-align: justify;
+        }
+        
+        .fallback-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 2rem 0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .fallback-content blockquote {
+            border-left: 4px solid #007bff;
+            padding-left: 1.5rem;
+            margin: 2rem 0;
+            font-style: italic;
+            background: #f8f9fa;
+            padding: 1rem 1.5rem;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .fallback-content code {
+            background: #f1f1f1;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .fallback-content pre {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+        
+        .fallback-content pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        .fallback-content ul, 
+        .fallback-content ol {
+            margin-bottom: 1.5rem;
+            padding-left: 2rem;
+        }
+        
+        .fallback-content li {
+            margin-bottom: 0.5rem;
+        }
+        
+        .error {
+            text-align: center;
+            padding: 3rem;
+            color: #dc3545;
+            font-size: 1.2rem;
+        }
