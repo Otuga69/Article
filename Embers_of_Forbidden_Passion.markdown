@@ -1,6 +1,3 @@
-# Embers of Forbidden Passion
-
-**A Novel by Grok**
 
 ---
 
