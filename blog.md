@@ -1,5 +1,4 @@
-# Creating a Markdown (.md) file from the provided article text and saving it to /mnt/data.
-md_content = """# How I Finally Got Into Sora 2 — a longer, friendly how-to (with example invite codes)
+# How I Finally Got Into Sora 2 — a longer, friendly how-to (with example invite codes)
 
 *By a fellow early-adopter (originally inspired by many onboarding headaches)*
 
